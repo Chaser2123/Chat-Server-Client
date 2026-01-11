@@ -1,24 +1,50 @@
 const net = require('net');
 
 const clients = [];
+let clientId = 1;
 
 const server = net.createServer(client => {
-    client.setEncoding('utf8');
+    client.id = clientId++;
     clients.push(client);
 
+    const setClientName = () => client.username || `user${client.id}`;
+
     console.log('Client connected');
-    client.write('Welcome to the chat room\n');
+    client.write('Welcome to the chat room');
+
     clients.forEach(c => {
         if (c !== client) {
-            c.write('A new user has joined the chat\n');
+            c.write(`${setClientName()} has joined the chat\n`);
         }
     });
 
     client.on('data', data => {
-        const message = 'user'+ ' ' + (clients.indexOf(client) + 1) + ": " + data.toString().trim();
+        const trimmed = data.toString().trim();
+
+        if (trimmed.startsWith('/username ')) {
+            const username = trimmed.split(' ')[1];
+            if (username) {
+                client.username = username;
+                client.write(`Username set to ${username}`);
+            } else {
+                client.write('Usage: /username <name>');
+            }
+            return;
+        }
+        if (trimmed.toLowerCase() === '/exit') {
+            client.end();
+            return;
+        }
+        if (trimmed === '/clientlist') {
+            const names = clients.map(c => setClientName()).join(', ');
+            client.write(`Connected clients: ${names}`);
+            return;
+        }
+
+        const message = `${setClientName()}: ${trimmed}`;
         console.log(message);
 
-        // Broadcast to all other clients
+        // Broadcast to others
         clients.forEach(c => {
             if (c !== client) {
                 c.write(message + '\n');
@@ -27,7 +53,16 @@ const server = net.createServer(client => {
     });
 
     client.on('end', () => {
-        console.log('user'+ ' ' + (clients.indexOf(client) + 1) + ": " + 'disconnected');
+        const name = setClientName();
+        console.log(`${name} disconnected`);
+        clients.splice(clients.indexOf(client), 1);
+
+        clients.forEach(c => {
+            c.write(`${name} has left the chat`);
+        });
+    });
+
+    client.on('error', () => {
         clients.splice(clients.indexOf(client), 1);
     });
 });
